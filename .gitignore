@@ -209,3 +209,11 @@ __marimo__/
 # Data
 data/
 data
+
+
+*.tar.gz
+*.zip
+.tar.gz
+.zip
+*.rar
+*.7z
