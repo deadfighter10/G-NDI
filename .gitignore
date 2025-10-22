@@ -1,0 +1,44 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+env/
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+
+# Logs and environment
+*.log
+.env
+
+# Database and backup files
+*.sqlite3
+*.db
+*.bak
+*.swp
+*.tmp
+*.old
+*.backup
+*.orig
+*.rej
+
+# PyTorch model files
+*.pt
+*.pth
+
+# Data folders
+data/
+data
+cifar-10-batches-py
+cifar-10-python.tar.gz

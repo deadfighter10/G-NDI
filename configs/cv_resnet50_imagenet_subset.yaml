@@ -1,0 +1,94 @@
+# ImageNet-1k subset (100–200 classes) / ResNet-50
+experiment_name: cv_resnet50_imagenet_subset
+
+seed: 42
+seeds: [42, 43, 44]
+deterministic: true
+amp: true
+
+paths:
+  data_root: ./data/imagenet_subset
+  out_dir: ./runs/cv_resnet50_imagenet_subset
+  # Expect directory structure like ImageNet but filtered to subset.
+
+dataset:
+  name: imagenet_subset
+  num_classes: 200
+  image_size: 224
+  train_split: train
+  val_split: val
+  normalize: true
+  augment:
+    randaugment: true
+    random_resized_crop: true
+    color_jitter: 0.4
+    random_horizontal_flip: true
+  num_workers: 12
+  pin_memory: true
+
+model:
+  family: resnet
+  arch: resnet50
+  pretrained: true
+  residual_aware: true
+  expose_units: conv_channels
+  prune_residual_branch_only: true
+
+train:
+  epochs: 20
+  batch_size: 128
+  eval_batch_size: 256
+  optimizer: sgd
+  lr: 0.2
+  weight_decay: 0.0001
+  momentum: 0.9
+  nesterov: true
+  lr_schedule: cosine
+  warmup_epochs: 2
+
+score:
+  methods: [gndi, magnitude, snip, grasp, synflow, hrank]
+  gndi: { p_norm: 2, baseline: zero, max_batches: 6, use_cached_activations: true }
+  magnitude: { norm: l1 }
+  snip: { at_init: false, max_batches: 2 }
+  grasp: { max_batches: 2 }
+  synflow: { data_free: true }
+  hrank: { max_batches: 6 }
+  warmup_epochs: 1
+
+causal_ground_truth:
+  enabled: true
+  units_to_sample: 300
+  metric: output_delta
+  p_norm: 2
+  batches: 3
+
+prune:
+  granularity: unit
+  unit_kind: conv_channels
+  global_ranking: true
+  budget_type: flops
+  budgets: [0.01, 0.02, 0.05, 0.10, 0.20, 0.30]
+  per_layer_cap: 0.5
+  structural: false
+
+finetune:
+  enabled: true
+  epochs: 5
+  batch_size: 128
+  lr: 0.05
+  weight_decay: 0.0001
+  momentum: 0.9
+  lr_schedule: cosine
+
+eval:
+  topk: [1, 5]
+  metrics: [accuracy, flops, params]
+  bootstrap:
+    spearman: { rounds: 1000, ci: 0.95 }
+
+report:
+  save_json: true
+  save_csv: true
+  save_plots: true
+  build_pdf: true

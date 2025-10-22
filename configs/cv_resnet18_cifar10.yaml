@@ -1,0 +1,114 @@
+# CIFAR-10 / ResNet-18
+experiment_name: cv_resnet18_cifar10
+
+seed: 42
+seeds: [42, 43, 44]
+deterministic: true
+amp: true
+
+paths:
+  data_root: ./data
+  out_dir: ./runs/cv_resnet18_cifar10
+
+dataset:
+  name: cifar10
+  num_classes: 10
+  image_size: 32
+  train_split: train
+  val_split: test
+  normalize: true
+  augment:
+    random_crop: true
+    crop_padding: 4
+    random_horizontal_flip: true
+    cutout: 0
+  num_workers: 8
+  pin_memory: true
+
+model:
+  family: resnet
+  arch: resnet18
+  pretrained: false
+  residual_aware: true
+  expose_units: conv_channels   # conv_channels | fc_neurons
+  # Only prune residual branch channels to keep skip valid:
+  prune_residual_branch_only: true
+
+train:
+  epochs: 10
+  batch_size: 128
+  eval_batch_size: 256
+  optimizer: sgd
+  lr: 0.1
+  weight_decay: 0.0005
+  momentum: 0.9
+  nesterov: true
+  lr_schedule: cosine
+  warmup_epochs: 0
+  grad_clip: null
+
+score:
+  methods: [gndi, magnitude, snip, grasp, synflow, hrank]
+  gndi:
+    p_norm: 2
+    baseline: zero           # zero | batch_mean | identity
+    max_batches: 8           # batches for score estimation
+    use_cached_activations: true
+  magnitude:
+    norm: l1                 # l1 | l2
+  snip:
+    at_init: false           # false = after warmup_epochs
+    max_batches: 2
+  grasp:
+    max_batches: 2
+  synflow:
+    data_free: true
+  hrank:
+    max_batches: 8
+  warmup_epochs: 1           # light warmup before scoring (for non-init methods)
+
+causal_ground_truth:
+  enabled: true
+  units_to_sample: 400       # sample subset to keep cost tractable
+  metric: output_delta       # output_delta | loss_delta
+  p_norm: 2
+  batches: 4
+
+prune:
+  granularity: unit          # unit = channels/neurons
+  unit_kind: conv_channels
+  global_ranking: true
+  budget_type: params        # params | flops
+  budgets: [0.01, 0.02, 0.05, 0.10, 0.20, 0.30, 0.50]
+  per_layer_cap: 0.5         # optional safety cap (fraction)
+  structural: false          # start with masking; set true for real structural
+  iterative:
+    enabled: false
+    steps: 5
+    step_budget: 0.1
+
+finetune:
+  enabled: true
+  epochs: 3
+  batch_size: 128
+  lr: 0.03
+  weight_decay: 0.0005
+  momentum: 0.9
+  lr_schedule: cosine
+
+eval:
+  topk: [1]
+  metrics:
+    - accuracy
+    - flops
+    - params
+  bootstrap:
+    spearman:
+      rounds: 1000
+      ci: 0.95
+
+report:
+  save_json: true
+  save_csv: true
+  save_plots: true
+  build_pdf: true

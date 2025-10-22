@@ -1,0 +1,83 @@
+# Yelp Polarity / DistilBERT
+experiment_name: nlp_distilbert_yelp
+
+seed: 42
+seeds: [42, 43, 44]
+deterministic: true
+amp: true
+
+paths:
+  data_root: ./data
+  out_dir: ./runs/nlp_distilbert_yelp
+
+dataset:
+  name: yelp_polarity
+  tokenizer_name: distilbert-base-uncased
+  max_length: 128
+  pad_to_max_length: true
+  train_split: train
+  val_split: test
+  num_workers: 6
+  pin_memory: true
+
+model:
+  family: distilbert
+  arch: distilbert-base-uncased
+  pretrained: true
+  expose_units: transformer_units
+  unit_kinds: [heads, ffn]
+  residual_aware: true
+
+train:
+  epochs: 3
+  batch_size: 32
+  eval_batch_size: 64
+  optimizer: adamw
+  lr: 3.0e-5
+  weight_decay: 0.01
+  lr_schedule: linear
+  warmup_steps: 500
+  grad_clip: 1.0
+
+score:
+  methods: [gndi, magnitude]
+  gndi: { p_norm: 2, baseline: zero, max_batches: 8, use_cached_activations: true }
+  magnitude: { norm: l1 }
+  warmup_epochs: 0
+
+causal_ground_truth:
+  enabled: true
+  units_to_sample: 300
+  metric: output_delta
+  p_norm: 2
+  batches: 4
+
+prune:
+  granularity: unit
+  unit_kind: both
+  global_ranking: true
+  budget_type: params
+  budgets: [0.01, 0.02, 0.05, 0.10, 0.20, 0.30]
+  per_layer_cap: 0.5
+  structural: false
+
+finetune:
+  enabled: true
+  epochs: 2
+  batch_size: 32
+  lr: 2.0e-5
+  weight_decay: 0.01
+  lr_schedule: linear
+  warmup_steps: 0
+  grad_clip: 1.0
+
+eval:
+  metrics: [accuracy, flops, params]
+  bootstrap:
+    spearman: { rounds: 1000, ci: 0.95 }
+
+report:
+  save_json: true
+  save_csv: true
+  save_plots: true
+  build_pdf: true

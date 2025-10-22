@@ -1,0 +1,132 @@
+[
+  {
+    "dataset": "MNIST",
+    "model": "MLP",
+    "method": "GNDI(b=zero,p=2.0)",
+    "pearson": 1.0,
+    "spearman": 0.9999999999999999,
+    "kendall": 1.0,
+    "layers": 2,
+    "time": 0.05
+  },
+  {
+    "dataset": "MNIST",
+    "model": "MLP",
+    "method": "WeightMagnitude",
+    "pearson": -1.0,
+    "spearman": -0.9999999999999999,
+    "kendall": -1.0,
+    "layers": 2,
+    "time": 0.05
+  },
+  {
+    "dataset": "MNIST",
+    "model": "MLP",
+    "method": "SynFlow",
+    "pearson": 1.0,
+    "spearman": 0.9999999999999999,
+    "kendall": 1.0,
+    "layers": 2,
+    "time": 0.05
+  },
+  {
+    "dataset": "FashionMNIST",
+    "model": "TinyCNN",
+    "method": "GNDI(b=zero,p=2.0)",
+    "pearson": 0.9638777822672138,
+    "spearman": 1.0,
+    "kendall": 1.0,
+    "layers": 3,
+    "time": 0.16
+  },
+  {
+    "dataset": "FashionMNIST",
+    "model": "TinyCNN",
+    "method": "WeightMagnitude",
+    "pearson": -0.2853832981757834,
+    "spearman": -0.5,
+    "kendall": -0.33333333333333337,
+    "layers": 3,
+    "time": 0.17
+  },
+  {
+    "dataset": "FashionMNIST",
+    "model": "TinyCNN",
+    "method": "SynFlow",
+    "pearson": 0.9994316420631669,
+    "spearman": 1.0,
+    "kendall": 1.0,
+    "layers": 3,
+    "time": 0.18
+  },
+  {
+    "dataset": "CIFAR10",
+    "model": "TinyCNN3",
+    "method": "GNDI(b=zero,p=2.0)",
+    "pearson": 0.9999637458877944,
+    "spearman": 1.0,
+    "kendall": 1.0,
+    "layers": 3,
+    "time": 0.88
+  },
+  {
+    "dataset": "CIFAR10",
+    "model": "TinyCNN3",
+    "method": "WeightMagnitude",
+    "pearson": -0.38622260916376006,
+    "spearman": 0.5,
+    "kendall": 0.33333333333333337,
+    "layers": 3,
+    "time": 0.88
+  },
+  {
+    "dataset": "CIFAR10",
+    "model": "TinyCNN3",
+    "method": "SynFlow",
+    "pearson": 0.9957367964666533,
+    "spearman": 0.5,
+    "kendall": 0.33333333333333337,
+    "layers": 3,
+    "time": 0.9
+  },
+  {
+    "dataset": "AGNews",
+    "model": "TextCNN",
+    "method": "GNDI(b=zero,p=2.0)",
+    "pearson": 1.0,
+    "spearman": 0.9999999999999999,
+    "kendall": 1.0,
+    "layers": 2,
+    "time": 1.1
+  },
+  {
+    "dataset": "AGNews",
+    "model": "TextCNN",
+    "method": "WeightMagnitude",
+    "pearson": -1.0,
+    "spearman": -0.9999999999999999,
+    "kendall": -1.0,
+    "layers": 2,
+    "time": 1.1
+  },
+  {
+    "dataset": "YelpPolarity",
+    "model": "GRUClass",
+    "method": "GNDI(b=zero,p=2.0)",
+    "pearson": NaN,
+    "spearman": NaN,
+    "kendall": NaN,
+    "layers": 1,
+    "time": 1.19
+  },
+  {
+    "dataset": "YelpPolarity",
+    "model": "GRUClass",
+    "method": "WeightMagnitude",
+    "pearson": NaN,
+    "spearman": NaN,
+    "kendall": NaN,
+    "layers": 1,
+    "time": 1.19
+  }
+]

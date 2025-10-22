@@ -1,0 +1,13 @@
+{
+  "final_pass": true,
+  "criteria": {
+    "GNDI_spearman_>=0.3_in_at_least_2_scenarios": true,
+    "degenerate_safe": true
+  },
+  "spearman_core": [
+    0.9999999999999999,
+    1.0,
+    1.0,
+    0.9999999999999999
+  ]
+}
