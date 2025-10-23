@@ -1,138 +1,104 @@
 # gndi/scoring/gndi.py
 # -*- coding: utf-8 -*-
 """
-G-NDI: Causal first-order effect via directional intervention and suffix re-evaluation.
+G-NDI (JVP version): Causal first-order effect
+Δ̂_L(x) = J_{>L}(x) (b_L - h_L(x))
+Score per sample: CIS_L(x) = || Δ̂_L(x) ||_p
+Score per unit:  E_x[CIS_L(x)] using the unit-restricted vector (b - h)_u.
 
-We approximate the JVP term J_{>L}(x) (b_L - h_L(x)) with a small directional
-forward difference: f(h + α v) - f(h), where v is (b - h)_restricted_to_unit.
+This implements the *true* JVP using torch.autograd.functional.jvp by
+treating the module output as an explicit variable z and defining a closure:
 
-This keeps the implementation robust without requiring an explicit forward-mode JVP
-decomposition of the model into prefix/suffix. Your model wrappers should expose
-units and ensure that the module's forward output contains the unit along a known axis:
+    F(z) := model(x) with that module's output replaced by (h.detach() + z)
 
-- conv_channel: module output shaped [B, C, H, W]
-- fc_neuron:    module output shaped [B, C] or [B, T, C] (neuron along last dim)
-- ffn_neuron:   same as fc_neuron (Transformer MLP output)
-- attn_head:    module output shaped one of: [B, Heads, T, D] or [B, T, Heads, D]
-                (we auto-detect the head axis by matching 'index')
-
-Config knobs exposed via kwargs:
-- p_norm: 1|2|float("inf")  (default 2)
-- baseline: "zero"|"batch_mean"|"identity" (identity: residual bypass = no change)
-- alpha: small step size for finite difference (default 1e-2)
-- max_batches: limit scoring batches for efficiency
-- amp: bool mixed precision guard
+Then   J_{>L}(x) v  = jvp(F, (0,), (v,)).jvp   where v is unit-restricted (b-h).
 """
 
 from __future__ import annotations
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Optional
 import contextlib
 
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 __all__ = ["compute_gndi_units"]
 
-from tqdm import tqdm
 
+# ------------------------------- utilities -------------------------------
 
 def _amp_guard(enabled: bool, device: torch.device):
+    # Device-agnostic autocast (works on MPS/CPU/CUDA)
     return torch.amp.autocast(device_type=device.type, enabled=enabled)
-
-def _unit_restrict_like(h: torch.Tensor, unit: Dict[str, Any], vec: Optional[torch.Tensor] = None, fill: float = 0.0) -> torch.Tensor:
-    """
-    Create a tensor same-shape as h with zeros everywhere except the slice for `unit`.
-    If `vec` is provided, copy the matching slice from `vec` into that slice;
-    otherwise copy the slice from `h` (or fill with a constant if desired).
-    """
-    t = torch.zeros_like(h)
-    utype = unit["type"]
-    idx = int(unit["index"])
-
-    src_base = h if vec is None else vec  # use vec's slice when given
-
-    if utype == "conv_channel":
-        # h: [B, C, H, W]
-        t[:, idx:idx+1, ...] = src_base[:, idx:idx+1, ...]
-        return t
-
-    if utype in ("fc_neuron", "ffn_neuron"):
-        # h: [B, C] or [B, T, C] (neuron along last dim)
-        if h.dim() == 2:
-            t[:, idx:idx+1] = src_base[:, idx:idx+1]
-        elif h.dim() == 3:
-            t[..., idx:idx+1] = src_base[..., idx:idx+1]
-        else:
-            raise ValueError(f"Unexpected tensor rank for {utype}: {h.shape}")
-        return t
-
-    if utype == "attn_head":
-        # Supported formats: [B, Heads, T, D] or [B, T, Heads, D]
-        if h.dim() != 4:
-            raise ValueError(f"Unexpected tensor rank for attn_head: {h.shape}")
-        B, A, C, D = h.shape
-        # Prefer axis=1 as heads; fallback to axis=2 if it fits idx
-        if A > idx:
-            slc = (slice(None), slice(idx, idx+1), slice(None), slice(None))
-        elif C > idx:
-            slc = (slice(None), slice(None), slice(idx, idx+1), slice(None))
-        else:
-            raise ValueError(f"Cannot locate head axis for shape {h.shape} and head idx={idx}")
-        t[slc] = src_base[slc]
-        return t
-
-    raise ValueError(f"Unknown unit type: {utype}")
-
-
-def _make_baseline(h: torch.Tensor, unit: Dict[str, Any], kind: str) -> torch.Tensor:
-    """
-    Construct baseline b with same shape as h.
-    - 'zero': zero-out the unit slice (default, safe everywhere)
-    - 'batch_mean': replace with batch mean (lower-variance shot)
-    - 'identity': residual bypass -> equivalent to removing the residual branch,
-                  so baseline for the residual's output should be ZERO.
-    """
-    if kind == "zero":
-        return torch.zeros_like(h)
-
-    elif kind == "batch_mean":
-        # per-tensor batch mean (we only copy the unit's slice later)
-        mean = h.mean(dim=0, keepdim=True).expand_as(h)
-        return mean
-
-    elif kind == "identity":
-        # IMPORTANT: for residual branches, 'identity' means "skip connection only"
-        # => residual branch contribution = 0
-        return torch.zeros_like(h)
-
-    else:
-        raise ValueError(f"Unknown baseline kind: {kind}")
 
 @contextlib.contextmanager
 def _replace_output_hook(module: nn.Module, new_output: torch.Tensor):
-    """
-    Temporarily replace the module's output by returning new_output from its forward hook.
-    """
-    handle = None
-    def hook(_mod, _inp, _out):
-        return new_output
-    handle = module.register_forward_hook(lambda m, i, o: hook(m, i, o))
+    """Temporarily replace a module's forward output with `new_output`."""
+    handle = module.register_forward_hook(lambda m, i, o: new_output)
     try:
         yield
     finally:
-        if handle is not None:
-            handle.remove()
+        handle.remove()
 
-def _model_forward(model: nn.Module, batch: Any, amp: bool, device: torch.device) -> torch.Tensor:
-    x, _ = batch
-    with _amp_guard(amp, device):
-        return model(x)
+def _unit_restrict_like(h: torch.Tensor, unit: Dict[str, Any],
+                        vec: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """
+    Return a tensor like h with zeros everywhere except the slice for `unit`.
+    If vec is given, use the unit-slice from vec; else copy from h.
+    """
+    t = torch.zeros_like(h)
+    idx = int(unit["index"])
+    src = h if vec is None else vec
+    utype = unit["type"]
 
+    if utype == "conv_channel":          # [B, C, H, W]
+        t[:, idx:idx+1, ...] = src[:, idx:idx+1, ...]
+    elif utype in ("fc_neuron", "ffn_neuron"):
+        if h.dim() == 2:                 # [B, C]
+            t[:, idx:idx+1] = src[:, idx:idx+1]
+        elif h.dim() == 3:               # [B, T, C]
+            t[..., idx:idx+1] = src[..., idx:idx+1]
+        else:
+            raise ValueError(f"Unexpected rank for {utype}: {h.shape}")
+    elif utype == "attn_head":
+        # Accept [B, Heads, T, D] or [B, T, Heads, D]
+        if h.dim() != 4:
+            raise ValueError(f"Unexpected rank for attn_head: {h.shape}")
+        _, A, C, _ = h.shape
+        if A > idx:
+            t[:, idx:idx+1, :, :] = src[:, idx:idx+1, :, :]
+        elif C > idx:
+            t[:, :, idx:idx+1, :] = src[:, :, idx:idx+1, :]
+        else:
+            raise ValueError(f"Cannot locate head axis for shape {h.shape} / idx={idx}")
+    else:
+        raise ValueError(f"Unknown unit type: {utype}")
+    return t
 
 def _p_norm(v: torch.Tensor, p: float) -> torch.Tensor:
     if p == float("inf"):
         return v.abs().amax(dim=tuple(range(1, v.dim())), keepdim=False)
     return v.flatten(1).norm(p=p, dim=1)
+
+def _make_baseline(h: torch.Tensor, kind: str) -> torch.Tensor:
+    """
+    Construct baseline b with same shape as h.
+    - 'zero'       : zeros
+    - 'batch_mean' : repeat batch mean across batch
+    - 'identity'   : for residual branches, identity means "skip-only",
+                     i.e. residual contribution = 0  (=> b = 0)
+    """
+    if kind == "zero":
+        return torch.zeros_like(h)
+    if kind == "batch_mean":
+        return h.mean(dim=0, keepdim=True).expand_as(h)
+    if kind == "identity":
+        # IMPORTANT: residual branch contribution set to 0
+        return torch.zeros_like(h)
+    raise ValueError(f"Unknown baseline kind: {kind}")
+
+
+# ------------------------------- main API --------------------------------
 
 def compute_gndi_units(
     model: nn.Module,
@@ -141,88 +107,91 @@ def compute_gndi_units(
     *,
     p_norm: float = 2.0,
     baseline: str = "zero",
-    alpha: float = 1e-2,
     max_batches: int = 8,
     amp: bool = True,
     reduction: str = "mean",
-    ** kwargs,
+    **kwargs,
 ) -> Dict[str, float]:
     """
-    Returns {unit_id: score}, where score is E_x || f(h + α v_u) - f(h) ||_p.
+    Compute G-NDI scores for the provided `units` using the analytical JVP:
+        Δ̂_L(x) = J_{>L}(x) (b_L - h_L(x))
+    Returns {unit_id: E_x ||Δ̂_L(x)||_p }.
 
-    Notes:
-    - Requires the *unit.module* to be exactly the module whose output contains the unit.
-    - Uses a forward hook to override that module's output with h or h+αv.
-    - alpha is automatically scaled by the unit slice magnitude for stability.
+    Notes
+    -----
+    - Assumes each unit dict has: {"id", "module", "type", "index"}.
+    - Works with conv channels, FC/FFN neurons, and (best-effort) attention heads.
+    - No parameter grads are needed; this uses functional JVP over an activation variable.
     """
 
     device = next(model.parameters()).device
     model.eval()
+
+    # Prepare accumulators
     scores = {u["id"]: 0.0 for u in units}
     counts = {u["id"]: 0 for u in units}
 
-    # Cache one clean forward per batch; then per unit, re-run with replacement
+    # Iterate over a limited number of batches
     num_batches = 0
-    for batch in tqdm(dataloader, total=max_batches, desc=f"GNDI scoring ({len(units)} units)", ncols=90):
+    for batch in tqdm(dataloader, total=max_batches, desc=f"GNDI scoring ({len(units)} units)", ncols=92):
         if num_batches >= max_batches:
             break
         num_batches += 1
+
         x, y = batch
         x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True) if torch.is_tensor(y) else y
+        if torch.is_tensor(y):  # y unused here, but move if tensor
+            y = y.to(device, non_blocking=True)
 
-        # First pass: get original outputs and capture h per-module
-        # We capture module outputs with simple hooks.
+        # 1) Forward once to capture the per-module outputs h_L(x)
         module_to_h = {}
+        def _capture_hook(m, i, o):
+            module_to_h[m] = o
 
-        def make_capture(mod):
-            return mod.register_forward_hook(lambda m, i, o: module_to_h.__setitem__(m, o))
-
-        handles = [make_capture(u["module"]) for u in units]
-        device = next(model.parameters()).device
+        hooks = [u["module"].register_forward_hook(_capture_hook) for u in units]
         with _amp_guard(amp, device):
-            base_out = model(x)
-        for h in handles: h.remove()
+            _ = model(x)
+        for h in hooks:
+            h.remove()
 
+        # 2) For each unit, compute JVP at z=0 with v = (b - h)_restricted_to_unit
         for u in tqdm(units, desc="Units", leave=False, ncols=80):
             uid = u["id"]
-            module = u["module"]
-            h = module_to_h.get(module, None)
+            mod = u["module"]
+            h = module_to_h.get(mod, None)
             if h is None:
-                # Module didn't run (e.g., conditional path); skip safely
-                continue
+                continue  # module not executed (conditional path)
 
-            # Build baseline and directional vector v = (b - h)_restricted_to_unit
-            b = _make_baseline(h, u, baseline)
-            diff = (b - h).detach()
-            v_u = _unit_restrict_like(h, u, vec=diff)
+            # Build baseline and perturbation vector
+            b = _make_baseline(h, baseline)         # same shape as h
+            v_full = (b - h).detach()               # do NOT require grad on v
+            v_u = _unit_restrict_like(h, u, vec=v_full)
 
-            # Scale α by unit-slice magnitude to keep step comparable
-            denom = (_unit_restrict_like(h, u).abs().mean() + 1e-8).item()
-            step = alpha if denom == 0 else alpha * denom
+            # Define F(z): run model with module output replaced by (h_detached + z)
+            h_det = h.detach()
 
-            # Evaluate outputs with h (sanity) and h+αv
-            # 1) f(h): just reuse base_out
-            with torch.no_grad():
-                y0 = base_out
+            def F(z: torch.Tensor) -> torch.Tensor:
+                with _replace_output_hook(mod, h_det + z), _amp_guard(amp, device):
+                    return model(x)
 
-            # 2) f(h + α v)
-            h_pert = (h + step * v_u).detach()
-            with _replace_output_hook(module, h_pert), torch.no_grad(), _amp_guard(amp, device):
-                y1 = model(x)
+            # Evaluate jvp at z0 = 0 (same shape as h)
+            z0 = torch.zeros_like(h_det, requires_grad=False)
+            # jvp returns (F(z0), J@v); we only need the jvp term
+            y0, jv = torch.autograd.functional.jvp(F, (z0,), (v_u,), create_graph=False, strict=False)
 
-            # Per-sample Δ and p-norm
-            delta = y1 - y0
-            s = _p_norm(delta, p=p_norm)
+            # score for this batch
+            s = _p_norm(jv, p=p_norm)
             s_val = s.mean().item() if reduction == "mean" else s.sum().item()
-
             scores[uid] += s_val
             counts[uid] += 1
 
-    # Normalize by number of batches processed
-    for uid in scores:
-        if counts[uid] > 0:
-            scores[uid] /= counts[uid]
-        else:
-            scores[uid] = 0.0
+        # Early sanity after first batch
+        if num_batches == 1:
+            nz = sum(v > 0 for v in scores.values())
+            print(f"[GNDI/JVP] after 1 batch: nonzero={nz}/{len(scores)}")
+
+    # Average over batches
+    for k in scores:
+        scores[k] = (scores[k] / counts[k]) if counts[k] > 0 else 0.0
+
     return scores

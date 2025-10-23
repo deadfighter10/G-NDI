@@ -1,2 +1,2 @@
 dataset,model,method,pearson,spearman,kendall,ci_low,ci_high
-cifar10,resnet18,gndi,0.0,0.0,0.0,nan,nan
+cifar10,resnet18,gndi,0.811591541918684,0.8538567804890138,0.6675884966878612,0.8155801151920599,0.8845428969030213
