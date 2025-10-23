@@ -1,0 +1,2 @@
+dataset,model,method,pearson,spearman,kendall,ci_low,ci_high
+cifar10,resnet18,gndi,0.0,0.0,0.0,nan,nan

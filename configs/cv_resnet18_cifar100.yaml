@@ -12,6 +12,7 @@ paths:
 
 dataset:
   name: cifar100
+  subset_fraction: 0.1
   num_classes: 100
   image_size: 32
   train_split: train

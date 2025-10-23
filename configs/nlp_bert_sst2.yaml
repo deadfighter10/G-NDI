@@ -12,6 +12,7 @@ paths:
 
 dataset:
   name: sst2
+  subset_fraction: 0.1
   tokenizer_name: bert-base-uncased
   max_length: 128
   pad_to_max_length: true

@@ -1,0 +1,22 @@
+name: gndi
+channels: [pytorch, nvidia, conda-forge]
+dependencies:
+  - python=3.10
+  - pytorch>=2.2
+  - torchvision>=0.17
+  - torchaudio
+  - pytorch-cuda=12.1
+  - numpy
+  - scipy
+  - pyyaml
+  - matplotlib
+  - tqdm
+  - pandas
+  - pip
+  - pip:
+      - transformers>=4.44
+      - datasets>=2.19
+      - accelerate
+      - fvcore
+      - ptflops
+      - weasyprint

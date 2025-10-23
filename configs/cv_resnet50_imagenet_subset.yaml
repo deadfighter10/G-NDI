@@ -13,6 +13,7 @@ paths:
 
 dataset:
   name: imagenet_subset
+  subset_fraction: 0.1
   num_classes: 200
   image_size: 224
   train_split: train
