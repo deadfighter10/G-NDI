@@ -57,7 +57,7 @@ def compute_snip_units(
         saliency[u["id"]] = 0.0
 
     num = 0
-    scaler = torch.cuda.amp.GradScaler(enabled=False)  # forward AMP only; grads normal
+    scaler = torch.amp.GradScaler('cuda', enabled=False)
     for batch in dataloader:
         if num >= max_batches: break
         num += 1
@@ -66,7 +66,8 @@ def compute_snip_units(
         y = y.to(device, non_blocking=True)
 
         _accumulate_grads(model)
-        with torch.cuda.amp.autocast(enabled=amp):
+        dev = next(model.parameters()).device
+        with torch.amp.autocast(device_type=dev.type, enabled=amp):
             logits = model(x)
             loss = criterion(logits, y)
 

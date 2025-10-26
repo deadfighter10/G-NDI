@@ -1,0 +1,66 @@
+{
+  "config": "configs/cv_resnet18_cifar10.yaml",
+  "metric": "output_delta",
+  "results": {
+    "gndi": {
+      "pearson": 0.951029105636262,
+      "spearman": 0.9844150920743429,
+      "kendall": 0.9028624522453987,
+      "spearman_ci": [
+        0.9770753889492377,
+        0.9884196223459171
+      ],
+      "n_common": 281
+    },
+    "magnitude": {
+      "pearson": -0.5789477634977813,
+      "spearman": -0.5103579717479241,
+      "kendall": -0.35863006199929565,
+      "spearman_ci": [
+        -0.6006453818762921,
+        -0.4101128251556776
+      ],
+      "n_common": 281
+    },
+    "snip": {
+      "pearson": 0.813524229554173,
+      "spearman": 0.911104998883867,
+      "kendall": 0.7395487022189156,
+      "spearman_ci": [
+        0.8882736223029382,
+        0.9272398617169065
+      ],
+      "n_common": 281
+    },
+    "grasp": {
+      "pearson": -0.1935112931831986,
+      "spearman": 0.05953331432019872,
+      "kendall": 0.03937911246272289,
+      "spearman_ci": [
+        -0.08146287839769334,
+        0.20815982458627194
+      ],
+      "n_common": 281
+    },
+    "synflow": {
+      "pearson": NaN,
+      "spearman": NaN,
+      "kendall": NaN,
+      "spearman_ci": [
+        NaN,
+        NaN
+      ],
+      "n_common": 281
+    },
+    "hrank": {
+      "pearson": 0.6373583154645792,
+      "spearman": 0.6572382721129234,
+      "kendall": 0.47436564111376583,
+      "spearman_ci": [
+        0.5774862804333895,
+        0.7224348114614964
+      ],
+      "n_common": 281
+    }
+  }
+}

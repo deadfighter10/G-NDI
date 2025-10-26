@@ -68,7 +68,8 @@ def compute_hrank_units(
         for m in by_mod.keys():
             hooks.append(mk(m))
 
-        with torch.cuda.amp.autocast(enabled=amp), torch.no_grad():
+        dev = next(model.parameters()).device
+        with torch.amp.autocast(device_type=dev.type, enabled=amp):
             _ = model(x)
 
         for h in hooks: h.remove()

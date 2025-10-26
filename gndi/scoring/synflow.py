@@ -74,7 +74,8 @@ def compute_synflow_units(
         if p.grad is not None:
             p.grad.zero_()
 
-    with torch.cuda.amp.autocast(enabled=amp):
+    dev = next(model.parameters()).device
+    with torch.amp.autocast(device_type=dev.type, enabled=amp):
         out = model(ones)
         s = out.sum()
 

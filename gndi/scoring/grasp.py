@@ -58,7 +58,8 @@ def compute_grasp_units(
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
 
-        with torch.cuda.amp.autocast(enabled=amp):
+        dev = next(model.parameters()).device
+        with torch.amp.autocast(device_type=dev.type, enabled=amp):
             logits = model(x)
             loss = criterion(logits, y) / max_batches  # average across mini-batches
 
