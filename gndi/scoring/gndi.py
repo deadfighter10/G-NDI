@@ -138,19 +138,38 @@ def compute_gndi_units(
             break
         num_batches += 1
 
-        x, y = batch
-        x = x.to(device, non_blocking=True)
-        if torch.is_tensor(y):  # y unused here, but move if tensor
-            y = y.to(device, non_blocking=True)
+        # Handle NLP dictionary-based batches
+        if isinstance(batch, dict):
+            y = batch.pop('label', None)
+            if y is not None:
+                y = y.to(device, non_blocking=True)
+            x = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
+        # Handle CV tuple/list-based batches
+        elif isinstance(batch, (tuple, list)):
+            if len(batch) == 2:
+                x, y = batch
+            elif len(batch) == 3:
+                x, y, _ = batch  # ignore metadata/index
+            else:
+                x, y = batch[0], batch[1]
+            x = x.to(device, non_blocking=True)
+            if torch.is_tensor(y):
+                y = y.to(device, non_blocking=True)
+        else:
+            raise ValueError(f"Unexpected batch type: {type(batch)}")
 
         # 1) Forward once to capture the per-module outputs h_L(x)
         module_to_h = {}
+
         def _capture_hook(m, i, o):
             module_to_h[m] = o
 
         hooks = [u["module"].register_forward_hook(_capture_hook) for u in units]
         with _amp_guard(amp, device):
-            _ = model(x)
+            if isinstance(x, dict):
+                _ = model(**x)
+            else:
+                _ = model(x)
         for h in hooks:
             h.remove()
 
@@ -172,7 +191,11 @@ def compute_gndi_units(
 
             def F(z: torch.Tensor) -> torch.Tensor:
                 with _replace_output_hook(mod, h_det + z), _amp_guard(amp, device):
-                    return model(x)
+                    if isinstance(x, dict):
+                        outputs = model(**x)
+                        return outputs.logits if hasattr(outputs, 'logits') else outputs
+                    else:
+                        return model(x)
 
             # Evaluate jvp at z0 = 0 (same shape as h)
             z0 = torch.zeros_like(h_det, requires_grad=False)

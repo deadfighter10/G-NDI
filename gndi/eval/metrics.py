@@ -120,22 +120,45 @@ def bootstrap_spearman(
     hi = 1 - lo
     return {"rho": _nan_guard(base), "low": float(boots[int(lo * (rounds - 1))]), "high": float(boots[int(hi * (rounds - 1))])}
 
+
 @torch.no_grad()
 def eval_classification(model: nn.Module, loader, *, amp: bool = True) -> Dict[str, float]:
     device = next(model.parameters()).device
     model.eval()
     correct = 0
     total = 0
-    with torch.amp.autocast(device_type=next(model.parameters()).device.type, enabled=amp):
-        for x, y in loader:
-            x = x.to(device, non_blocking=True)
-            y = y.to(device, non_blocking=True)
-            logits = model(x)
+    with torch.amp.autocast(device_type=device.type, enabled=amp):
+        for batch in loader:
+            # Handle NLP dictionary-based batches
+            if isinstance(batch, dict):
+                y = batch.pop('label').to(device, non_blocking=True)
+                x = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
+            # Handle CV tuple/list-based batches
+            elif isinstance(batch, (tuple, list)):
+                if len(batch) == 2:
+                    x, y = batch
+                elif len(batch) == 3:
+                    x, y, _ = batch  # ignore metadata/index
+                else:
+                    x, y = batch[0], batch[1]
+                x = x.to(device, non_blocking=True)
+                y = y.to(device, non_blocking=True)
+            else:
+                raise ValueError(f"Unexpected batch type: {type(batch)}")
+
+            # Get logits based on input type
+            if isinstance(x, dict):
+                outputs = model(**x)
+                logits = outputs.logits if hasattr(outputs, 'logits') else outputs
+            else:
+                logits = model(x)
+
             preds = logits.argmax(dim=1)
             correct += (preds == y).sum().item()
             total += y.numel()
     acc = 100.0 * correct / max(total, 1)
     return {"acc@1": acc}
+
 
 def model_complexity(model: nn.Module, sample_input: Optional[torch.Tensor] = None) -> Dict[str, Optional[int]]:
     """

@@ -12,7 +12,7 @@ paths:
 
 dataset:
   name: cifar100
-  subset_fraction: 0.1
+  subset_fraction: 0.8
   num_classes: 100
   image_size: 32
   train_split: train
@@ -34,7 +34,7 @@ model:
   prune_residual_branch_only: true
 
 train:
-  epochs: 15
+  epochs: 50
   batch_size: 128
   eval_batch_size: 256
   optimizer: sgd

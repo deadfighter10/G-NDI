@@ -40,7 +40,7 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     # Train a dense model first (or you can load an existing checkpoint)
-    model, loaders = train_and_eval(cfg)
+    model, loaders, metrics = train_and_eval(cfg)
     device = next(model.parameters()).device
 
     units_all = _enumerate_units(model, cfg)
