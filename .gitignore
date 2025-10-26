@@ -210,7 +210,7 @@ __marimo__/
 data/
 data
 
-
+runs/nlp_bert_agnews
 *.tar.gz
 *.zip
 .tar.gz
