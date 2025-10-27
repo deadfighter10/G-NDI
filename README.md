@@ -1,74 +1,92 @@
 # General Neuro-Dynamic Importance (G-NDI)
 
-**Causal Layer Attribution via Virtual Interventions**  
-*David Leonard Nagy, Independent Research, 2025*
+**Author:** [David Leonard Nagy](https://davidleonardnagy.com)  
+**Affiliation:** Northwest Missouri State University (independent research project)  
+**Email:** s583993@nwmissouri.edu  
 
 ---
 
 ## Overview
-**G-NDI** estimates each layer’s **causal impact** on a model’s output by simulating a *virtual intervention*:
 
-> What would happen to the model’s prediction if this layer’s activation were replaced with a neutral baseline?
-
-By approximating the effect of the intervention do(h_L := b_L) via a **Jacobian–Vector Product (JVP)**, G-NDI captures *true causal dependence* rather than mere correlation (as in SNIP, GraSP, or Magnitude pruning).
+**G-NDI** (General Neuro-Dynamic Importance) is a *causal framework* for measuring the importance of neural network layers and units.  
+Instead of relying on weight magnitude or gradient sensitivity, G-NDI estimates how much the model’s output **would change if a layer were neutralized** — a virtual intervention approximated via Jacobian–vector products.
+*G-NDI reframes pruning as a causal reasoning problem rather than a correlational heuristic.*
 
 ---
 
 ## Method
 
-For each layer \( L \) in model \( f(x) = F_L(h_L(x)) \):
+For each layer $L$ in a model $f(x)$, the **causal importance** is defined as:
 
 $$
-\text{G-NDI}_L = \mathbb{E}_x \, \| J_{>L}(x) \, (h_L(x) - b_L) \|_p
+\text{GNDI}_L = \mathbb{E}_x \, \left\| J^{>L}(x) \, (h_L(x) - b_L) \right\|_p
 $$
 
-where  
-- \( J_{>L}(x) \): downstream Jacobian  
-- \( h_L(x) \): layer activation  
-- \( b_L \): neutral baseline (zero or mean)  
-- \( p \): norm order (typically 2)
+where:
+- $J^{>L}(x)$ – downstream Jacobian of layers following $L$
+- $h_L(x)$ – activation of layer $L$
+- $b_L$ – neutral baseline (zero or mean)
+- $\|\cdot\|_p$ – $p$-norm (typically $p=2$)
 
-**Requires:** one forward + one JVP per layer.  
-**No retraining required.**
+This approximates the **counterfactual intervention** $do(h_L = b_L)$ in Pearl’s causal calculus, and measures how much the model’s prediction would shift under that intervention.
 
----
-
-## Results
-
-**Dataset:** CIFAR-10 / CIFAR-100 **Model:** ResNet-18  
-**Baselines:** SNIP, GraSP, SynFlow, Magnitude, HRank
-
-| Metric | **G-NDI** | SNIP | HRank | Magnitude | GraSP |
-|:--|:--:|:--:|:--:|:--:|:--:|
-| **Pearson (r)** | **0.96** | 0.80 | 0.62 | −0.54 | −0.07 |
-| **Spearman (ρ)** | **0.98** | 0.91 | 0.66 | −0.51 | 0.06 |
-| **Kendall (τ)** | **0.90** | 0.73 | 0.48 | −0.35 | −0.04 |
+G-NDI requires only:
+- **1 forward pass**
+- **1 Jacobian–Vector Product (JVP)** per layer  
+→ No retraining, no second-order derivatives.
 
 ---
 
-## Highlights
-- **Causal interpretability:** measures true functional dependence  
-- **High causal validity:** Spearman ρ ≈ 0.98 on CIFAR-10  
-- **Retraining-free & efficient:** only forward + JVP  
-- **Cross-domain:** CV → NLP generalization  
-- **PyTorch implementation:** lightweight and reproducible
+## Experimental Results
+
+Evaluated on **CIFAR-10 / ResNet-18** and **CIFAR-100 / ResNet-18**:
+
+| Dataset | Model | Pearson ($r$) | Spearman ($\rho$) | Kendall ($\tau$) |
+|----------|--------|----------------|-------------------|------------------|
+| CIFAR-10 | ResNet-18 | **0.95** | **0.98** | **0.90** |
+| CIFAR-100 | ResNet-18 | 0.80 | 0.87 | 0.69 |
+
+Compared against SNIP, GraSP, SynFlow, Magnitude, and HRank.  
+G-NDI achieves the **highest causal validity** (correlation with true ablation damage) while maintaining competitive accuracy after pruning.
 
 ---
 
-## Usage
-```bash
-git clone https://github.com/yourusername/g-ndi
-cd g-ndi
-pip install -r requirements.txt
-```
-```python
-from gndi.scoring import compute_gndi
-score = compute_gndi(model, dataloader, baseline='zero', norm='l2')
-```
+## Causal Comparison
 
-David Leonard Nagy (2025)
-"General Neuro-Dynamic Importance (G-NDI): Causal Layer Attribution via Virtual Interventions"
-https://davidleonardnagy.com/gndi.pdf
+| Method | Pearson | Spearman | Kendall | Spearman CI (95%) |
+|--------|----------|-----------|----------|--------------------|
+| **G-NDI** | **0.958** | **0.981** | **0.900** | [0.970, 0.988] |
+| SNIP | 0.797 | 0.905 | 0.728 | [0.877, 0.923] |
+| HRank | 0.624 | 0.663 | 0.478 | [0.591, 0.729] |
+| Magnitude | -0.543 | -0.506 | -0.352 | [-0.584, -0.418] |
+| GraSP | -0.069 | 0.055 | -0.040 | [-0.193, 0.080] |
 
-License: MIT
+---
 
+## Key Features
+
+- **Causal interpretability:** Quantifies *actual dependency* between layers and outputs.  
+- **Efficiency:** Requires only first-order JVPs.  
+- **Cross-domain:** Applicable to CNNs, MLPs, Transformers.  
+- **No retraining:** Instant causal importance estimation.
+
+---
+
+## Citation
+
+If you use G-NDI in your work, please cite the mini-paper:
+
+@article{nagy2025gndi,\
+title={General Neuro-Dynamic Importance (G-NDI): Causal Layer Attribution via Virtual Interventions},\
+author={Nagy, David Leonard},\
+year={2025},\
+institution={Independent Research, Northwest Missouri State University}\
+}
+
+---
+
+## Contact
+
+For collaboration or visiting-research opportunities:  
+**Email:** s583993@nwmissouri.edu  
+**Portfolio:** [davidleonardnagy.com](https://davidleonardnagy.com)
