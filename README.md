@@ -1,13 +1,5 @@
 # General Neuro-Dynamic Importance (G-NDI)
 
-**Author:** [David Leonard Nagy](https://davidleonardnagy.com)  
-**Affiliation:** Northwest Missouri State University (independent research project)  
-**Email:** s583993@nwmissouri.edu  
-
----
-
-## Overview
-
 **G-NDI** (General Neuro-Dynamic Importance) is a *causal framework* for measuring the importance of neural network layers and units.  
 Instead of relying on weight magnitude or gradient sensitivity, G-NDI estimates how much the model’s output **would change if a layer were neutralized** — a virtual intervention approximated via Jacobian–vector products.
 *G-NDI reframes pruning as a causal reasoning problem rather than a correlational heuristic.*
